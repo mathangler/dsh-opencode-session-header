@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+*.tgz
+
+# Local scratch: a live-verification DSH home, its mock provider and probe.
+.verify-live/
+test/tmp/

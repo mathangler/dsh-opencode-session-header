@@ -1,0 +1,19 @@
+# dsh-opencode-session-header — profile bundle patch.
+#
+# `dsh plugin --profile web add <this package>` runs pnpm in the profile
+# directory and then appends every dependency that declares `dsh.bundle` to
+# `dsh.profile.bundles`. This patch therefore lands after the shipped bundles
+# and before the user's own cordis.patch.yml, so that file can override this row
+# by id — to set the policy, or to disable the plugin outright:
+#
+#   - id: opencode-session-header
+#     config:
+#       value: uuid
+#       routes: ['opencode*', 'my-gateway']
+#
+# One row: the host half. There is no browser half — the header is a host-side
+# transport fact, and the status endpoint is same-origin JSON.
+
+- insert:
+    - id: opencode-session-header
+      name: dsh-opencode-session-header

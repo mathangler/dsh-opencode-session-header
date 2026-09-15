@@ -1,0 +1,4 @@
+# Keep the published sources byte-identical regardless of the checkout platform:
+# lib/ is shipped as-is, so a CRLF rewrite would change the package contents.
+* text=auto eol=lf
+*.tgz binary
