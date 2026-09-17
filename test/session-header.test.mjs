@@ -32,7 +32,8 @@ import {
   instrumentModels,
   isScopedRoute,
   resolveConfig,
-  SCOPED_ROUTES,
+  SCOPED_ROUTE_PATTERN,
+  SCOPED_ROUTE_PREFIX,
   sessionHeaderValue,
   SessionHeaderError,
 } from '../lib/session-header.js';
@@ -81,15 +82,18 @@ function fakeRegistry(entries) {
   return new Map(entries.map(([route, adapter]) => [route, { adapter, provider: { id: route, name: route }, retryPolicy: {} }]));
 }
 
-test('the scope is a fixed whitelist of the two OpenCode routes', () => {
-  assert.deepEqual(SCOPED_ROUTES, ['opencode-go', 'opencode-go-custom']);
+test('the scope is every route beginning with opencode-go, and nothing else', () => {
+  assert.equal(SCOPED_ROUTE_PREFIX, 'opencode-go');
+  assert.equal(SCOPED_ROUTE_PATTERN, 'opencode-go*');
   assert.equal(HEADER_NAME, 'x-opencode-session');
-  assert.equal(isScopedRoute('opencode-go'), true);
-  assert.equal(isScopedRoute('opencode-go-custom'), true);
-  assert.equal(isScopedRoute('OpenCode-Go'), true, 'route keys are matched case-insensitively');
-  assert.equal(isScopedRoute('opencode-go-eu'), false, 'a route that merely resembles the gateway is out');
-  assert.equal(isScopedRoute('opencode-zen'), false);
-  assert.equal(isScopedRoute('my-opencode-go'), false);
+  assert.equal(isScopedRoute('opencode-go'), true, 'the builtin provider key');
+  assert.equal(isScopedRoute('opencode-go-custom'), true, 'this deployment\'s route on top of it');
+  assert.equal(isScopedRoute('opencode-go-eu'), true, 'a sibling route added later needs no new release');
+  assert.equal(isScopedRoute('OpenCode-Go-Custom'), true, 'route keys are matched case-insensitively');
+  assert.equal(isScopedRoute('opencode-gocustom'), true, 'the rule is a literal prefix, not a separator-aware one');
+  assert.equal(isScopedRoute('opencode-zen'), false, 'another OpenCode gateway is a different contract');
+  assert.equal(isScopedRoute('opencode'), false);
+  assert.equal(isScopedRoute('my-opencode-go'), false, 'the prefix is anchored at the start');
   assert.equal(isScopedRoute('deepseek'), false);
   assert.equal(isScopedRoute(undefined), false);
 });
@@ -109,7 +113,7 @@ test('resolveConfig: the scope cannot be configured, and typos are rejected', ()
       assert.ok(error instanceof SessionHeaderError);
       assert.equal(error.code, 'opencode-session-header/invalid-config');
       assert.match(error.message, new RegExp(`unknown config key "${key}"`));
-      assert.match(error.message, /only opencode-go and opencode-go-custom models receive x-opencode-session/);
+      assert.match(error.message, /every route beginning with opencode-go \(opencode-go\*\) receives x-opencode-session, and no other route does/);
       return true;
     }, `${key} must not be configurable`);
   }
@@ -120,10 +124,11 @@ test('resolveConfig: the scope cannot be configured, and typos are rejected', ()
   assert.throws(() => resolveConfig(['opencode*']), /config must be an object/);
 });
 
-test('headerNameFor: only the whitelisted routes are in scope', () => {
+test('headerNameFor: only routes inside the prefix are in scope', () => {
   const config = resolveConfig(undefined);
   assert.equal(headerNameFor({ provider: 'opencode-go', api: 'openai-completions' }, config), HEADER_NAME);
   assert.equal(headerNameFor({ provider: 'opencode-go-custom', api: 'openai-responses' }, config), HEADER_NAME);
+  assert.equal(headerNameFor({ provider: 'opencode-go-eu', api: 'anthropic-messages' }, config), HEADER_NAME);
   assert.equal(headerNameFor({ provider: 'opencode-zen', api: 'openai-completions' }, config), undefined);
   assert.equal(headerNameFor({ provider: 'deepseek', api: 'openai-completions' }, config), undefined);
   assert.equal(headerNameFor({}, config), undefined, 'a descriptor with no route is out of scope');
@@ -150,7 +155,7 @@ test('applySessionHeader: negative control, then the attached header', () => {
 
   const untouched = applySessionHeader({ provider: 'opencode-zen', api: 'openai-completions' }, options, config, stats);
   assert.equal(untouched, options, 'an out-of-scope call is returned by identity, with no allocation');
-  assert.equal(untouched.headers[HEADER_NAME], undefined, 'control: nothing is added outside the whitelist');
+  assert.equal(untouched.headers[HEADER_NAME], undefined, 'control: nothing is added outside the prefix');
   assert.equal(stats.outOfScope, 1);
   assert.equal(stats.scoped, 0);
 
@@ -320,11 +325,15 @@ test('createSessionHeader: one sweep hooks the pi-ai adapter, and the scope stil
   assert.equal(laterModels.calls.at(-1).options.headers[HEADER_NAME], '11111111-2222-3333-4444-555555555555', 'two conversations get two values');
   assert.equal(core.status().hooked.adapters, 1, 'hooking once per instance, not once per call');
 
-  // A model outside the whitelist, reached through the very same hooked
-  // adapter, must be untouched.
+  // A model outside the prefix, reached through the very same hooked adapter,
+  // must be untouched — and its sibling inside the prefix must not be.
   const otherModels = new FakeModels({ id: 'deepseek-chat', provider: 'deepseek', api: 'openai-completions' });
   adapter.streamWithSnapshot({ provider: 'deepseek', sessionId: SESSION }, { models: otherModels });
-  assert.equal(otherModels.calls.at(-1).options.headers, undefined, 'a non-whitelisted model on a hooked adapter gets nothing');
+  assert.equal(otherModels.calls.at(-1).options.headers, undefined, 'a route outside the prefix on a hooked adapter gets nothing');
+
+  const siblingModels = new FakeModels({ id: 'probe-model', provider: 'opencode-go-eu', api: 'openai-completions' });
+  adapter.streamWithSnapshot({ provider: 'opencode-go-eu', sessionId: SESSION }, { models: siblingModels });
+  assert.equal(siblingModels.calls.at(-1).options.headers[HEADER_NAME], UUID, 'a route added under the prefix is covered with no config change');
 
   core.dispose();
   adapter.streamWithSnapshot({ provider: 'opencode-go', sessionId: SESSION }, { models });
@@ -340,7 +349,7 @@ test('createSessionHeader: a registry without a scoped route is reported', (t) =
   t.after(() => core.dispose());
   const adapter = new FakeAdapter(new FakeModels());
   assert.equal(core.hookRegistry(fakeRegistry([['deepseek', adapter]])), 1, 'the adapter is still hooked…');
-  assert.match(messages.at(-1), /no route in the LLM registry names opencode-go or opencode-go-custom/, '…and the missing scope is reported');
+  assert.match(messages.at(-1), /no route in the LLM registry begins with opencode-go/, '…and the missing scope is reported');
   assert.deepEqual(core.status().hooked.routesInScope, []);
 });
 
@@ -366,9 +375,14 @@ test('createSessionHeader: the status report is JSON-safe and previews every dec
   const status = core.status();
   assert.equal(status.name, 'dsh-opencode-session-header');
   assert.equal(status.header, HEADER_NAME);
-  assert.deepEqual(status.scope, SCOPED_ROUTES);
+  assert.deepEqual(status.scope, [SCOPED_ROUTE_PATTERN], 'the report names the prefix, not a route list');
   assert.deepEqual(Object.keys(status.counters).sort(), ['attached', 'calls', 'inherited', 'last', 'outOfScope', 'scoped', 'sessionless']);
-  assert.equal(status.preview.length, SCOPED_ROUTES.length * 3, 'every scoped route × protocol pair is previewed');
+  assert.equal(status.preview.length, 12, 'four representative routes × three protocols');
+  const forRoute = (route) => status.preview.filter((entry) => entry.route === route);
+  assert.equal(forRoute('opencode-go').every((entry) => entry.header === HEADER_NAME), true);
+  assert.equal(forRoute('opencode-go-custom').every((entry) => entry.header === HEADER_NAME), true);
+  assert.equal(forRoute('opencode-zen').every((entry) => entry.header === null), true, 'the preview shows where the prefix line falls');
+  assert.equal(forRoute('deepseek').every((entry) => entry.header === null), true);
   const completions = status.preview.find((entry) => entry.api === 'openai-completions');
   const responses = status.preview.find((entry) => entry.api === 'openai-responses');
   assert.equal(completions.header, HEADER_NAME);

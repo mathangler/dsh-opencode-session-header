@@ -21,7 +21,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { apply, CHANNEL, inject, name, resolveAdapterRegistry, SWEEP_RETRY_MS } from '../lib/index.js';
-import { HEADER_NAME, SCOPED_ROUTES } from '../lib/session-header.js';
+import { HEADER_NAME, SCOPED_ROUTE_PATTERN } from '../lib/session-header.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -226,7 +226,7 @@ test('apply: hooks the adapter for the scoped routes and logs what it did', (t) 
 
   const info = booted.ctx.logs.filter((entry) => entry.level === 'info').map((entry) => entry.message);
   assert.equal(info.some((line) => line.includes('hooked 1 pi-ai adapter')), true, `expected a hook line, got ${JSON.stringify(info)}`);
-  assert.equal(info.some((line) => line.includes(`${SCOPED_ROUTES.join(' / ')}`)), true, 'the active line names the fixed scope');
+  assert.equal(info.some((line) => line.includes(SCOPED_ROUTE_PATTERN)), true, 'the active line names the fixed prefix');
   assert.deepEqual(booted.ctx.listeners.map((entry) => entry.event), ['llm/adapters-updated']);
   assert.equal(booted.ctx.listeners[0].options.global, true, 'the registry event must reach this fiber from the LLM plugin');
   assert.equal(booted.routes.length, 1, 'the status endpoint was published');
@@ -340,7 +340,7 @@ test('the status endpoint answers GET with the live report', async (t) => {
   assert.equal(payload.ok, true);
   assert.equal(payload.value.name, 'dsh-opencode-session-header');
   assert.equal(payload.value.header, HEADER_NAME);
-  assert.deepEqual(payload.value.scope, SCOPED_ROUTES);
+  assert.deepEqual(payload.value.scope, [SCOPED_ROUTE_PATTERN]);
   assert.deepEqual(payload.value.hooked.routesInScope, ['opencode-go']);
   assert.equal(payload.value.counters.attached, 1);
   assert.equal(payload.value.counters.last.provider, 'opencode-go');

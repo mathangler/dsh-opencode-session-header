@@ -188,10 +188,11 @@ test('control, then the same call with the hook: only the hook changes the heade
   assert.equal(app.core.status().counters.outOfScope, 0);
 });
 
-test('the two scoped routes and their protocols are all covered', async (t) => {
+test('every opencode-go… route and its protocols are covered', async (t) => {
   const cases = [
     ['opencode-go', 'anthropic-messages', UUID],
     ['opencode-go-custom', 'openai-completions', UUID],
+    ['opencode-go-eu', 'openai-completions', UUID],
     // `auto` follows pi-ai on a Responses route, whose own session_id is
     // `session-<uuid>`: one conversation, one value, one routing bucket.
     ['opencode-go-custom', 'openai-responses', SESSION],
@@ -208,23 +209,26 @@ test('the two scoped routes and their protocols are all covered', async (t) => {
   }
 });
 
-test('nothing outside the whitelist is touched, even on the same adapter', async (t) => {
+test('the prefix decides on the real adapter: siblings in, neighbours out', async (t) => {
   const routes = [
     ['opencode-go', 'openai-completions'],
-    ['opencode-zen', 'openai-completions'],
     ['opencode-go-eu', 'openai-completions'],
+    ['opencode-zen', 'openai-completions'],
+    ['my-opencode-go', 'openai-completions'],
     ['deepseek', 'openai-completions'],
   ];
   const app = harness(routes, undefined);
   t.after(() => app.core.dispose());
-  assert.equal(app.hooked, 1, 'one adapter serves all four routes');
+  assert.equal(app.hooked, 1, 'one adapter serves all five routes');
   for (const [routeId] of routes) await app.turn(routeId, SESSION);
-  assert.equal(app.headersFor('opencode-go')[HEADER_NAME], UUID, 'the whitelisted route is labelled');
-  for (const routeId of ['opencode-zen', 'opencode-go-eu', 'deepseek']) {
+  for (const routeId of ['opencode-go', 'opencode-go-eu']) {
+    assert.equal(app.headersFor(routeId)[HEADER_NAME], UUID, `${routeId} begins with the prefix and must be labelled`);
+  }
+  for (const routeId of ['opencode-zen', 'my-opencode-go', 'deepseek']) {
     assert.equal(app.headersFor(routeId)[HEADER_NAME], undefined, `${routeId} must be left alone`);
   }
   const counters = app.core.status().counters;
-  assert.equal(counters.attached, 1);
+  assert.equal(counters.attached, 2);
   assert.equal(counters.outOfScope, 3, 'every out-of-scope call was counted, not silently ignored');
 });
 

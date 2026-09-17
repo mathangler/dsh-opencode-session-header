@@ -1,15 +1,16 @@
 # dsh-opencode-session-header
 
-一个 DeepSeek Harness 插件：给 **`opencode-go`** 与 **`opencode-go-custom`** 两个
-route 的每次推理请求带上稳定的**每会话** `x-opencode-session` 头，让 OpenCode 的
-Go / Zen 网关不再返回 `400 MissingSessionID`，并把每个会话路由到各自的缓存桶。
+一个 DeepSeek Harness 插件：给**以 `opencode-go` 开头的 route**（内置的 `opencode-go`、
+本部署的 `opencode-go-custom`，以及以后新增的同族 route）的每次推理请求带上稳定的
+**每会话** `x-opencode-session` 头，让 OpenCode 的 Go / Zen 网关不再返回
+`400 MissingSessionID`，并把每个会话路由到各自的缓存桶。
 
 它是原来那份"打补丁脚本"的替代方案：解决的问题一样、用的请求头通道一样，但
 
 - **不改任何文件** —— 已安装的 `dsh-llm-pi-ai` bundle 保持原样，也没有 patch 全局
   `fetch` / undici；
 - **DSH 升级后不用重打** —— 下次启动 `dsh` 自然就加载这个插件；
-- **范围严格** —— 只对这两个 route 生效，任何配置都无法扩大范围；
+- **范围严格** —— 只对某一个前缀之下的 route 生效，任何配置都无法扩大范围；
 - **可逆** —— 卸载插件会把它碰过的每个对象还原。
 
 [English](README.md) | 中文
@@ -28,22 +29,28 @@ Go / Zen 网关不再返回 `400 MissingSessionID`，并把每个会话路由到
 也就是说，这个 id 一路活到了适配器，然后被丢掉。本插件在**请求头 map 还是参数的最后一个
 位置**把它重新挂上去。
 
-## 范围：只有这两个 route
+## 范围：所有 `opencode-go…` route
 
-范围是**硬编码白名单**，不是通配模式：
+范围是**一个固定的前缀** —— 不是名单，也不是可配置的模式：
 
 ```js
-export const SCOPED_ROUTES = ['opencode-go', 'opencode-go-custom'];
+export const SCOPED_ROUTE_PREFIX = 'opencode-go';   // 大小写不敏感
+export const SCOPED_ROUTE_PATTERN = 'opencode-go*'; // 状态报告里显示的形式
 ```
 
-`opencode-zen`、`opencode-go-eu`、`my-opencode-go`、`deepseek` —— 其他任何 route
-都一个字节都不动，**包括由同一个适配器实例承载的其他 route**。这里刻意没有
-`routes:` / `optInRoutes:` / `skipApis:` 这类配置：一个能扩大范围的配置面，就是"能把
-某个网关专用的头发给根本没要求它的 provider"的配置面。写了这些键会直接报错并说明原因。
+所以内置的 `opencode-go`、本部署的 `opencode-go-custom`、以后可能出现的
+`opencode-go-eu`，以及任何 route key 以 `opencode-go` 开头的 route，**一注册就自动被覆盖**
+—— 不需要改配置，也不需要发新版本。其他 route 一个字节都不动，**包括由同一个适配器实例
+承载的其他 route**：`opencode-zen`（另一个网关契约）、`my-opencode-go`（前缀锚定在开头）、
+`opencode`、`deepseek`。
+
+这里刻意没有 `routes:` / `optInRoutes:` / `skipApis:` 这类配置：范围是代码里的常量，
+所以不可能因为配置写错而把某个网关专用的头发给根本没要求它的 provider。写了这些键会直接
+报错，并明确说明界线划在哪里。
 
 范围是按**每次模型调用**判定的，不是按适配器：插件挂的是 pi-ai 适配器，判定依据是
-pi-ai 收到的 model descriptor 上的 route key。测试里有专门的反例断言——在同一个承载
-白名单 route 的适配器上，非白名单 route 什么都不加。
+pi-ai 收到的 model descriptor 上的 route key。测试在**同一个适配器实例**上把两个方向都断言
+了：`opencode-go-eu` 会被加头，`opencode-zen` 什么都不加。
 
 ## 工作原理
 
@@ -108,7 +115,7 @@ dsh plugin --profile web add github:mathangler/dsh-opencode-session-header
 
 ## 配置
 
-默认什么都不用配：装上即覆盖 `opencode-go` / `opencode-go-custom`。要改策略，在 profile
+默认什么都不用配：所有 `opencode-go…` route 装上即覆盖。要改策略，在 profile
 自己的补丁层（`~/.dsh/profiles/web/cordis.patch.yml`）里按 id 覆盖：
 
 ```yaml
@@ -134,7 +141,7 @@ GET /opencode-session-header/status
 
 ```jsonc
 {
-  "scope": ["opencode-go", "opencode-go-custom"],
+  "scope": ["opencode-go*"],
   "header": "x-opencode-session",
   "hooked": { "adapters": 1, "prototypes": 1, "collections": 1,
               "routes": ["deepseek-official", "opencode-go", "opencode-go-custom"],
@@ -146,11 +153,12 @@ GET /opencode-session-header/status
 
 - `hooked.adapters: 0` 或出现 diagnostic —— 拿不到注册表，**头没有加上**。这种情况启动
   时就会大声报出来，绝不会静默。
-- `hooked.routesInScope: []` —— 这个 profile 里没有任何 route 指向该网关。
+- `hooked.routesInScope: []` —— 这个 profile 里没有任何 route 以该前缀开头。
 - `calls: 0` 且 `attached: 0` —— 还没有发生过模型调用。看钩子不需要凭证，但计数器只有
   真实流量才会动。
-- `preview` 给出"每个范围内的 route × 协议"的确切判定，是确认改 `value` 是否生效最快
-  的方式。
+- `preview` 会拿前缀内两条 route（`opencode-go`、`opencode-go-custom`）和前缀外两条
+  （`opencode-zen`、`deepseek`）分别对三种协议求值，所以它同时展示"判定结果"和"界线在哪"
+  —— 是确认改 `value` 是否生效最快的方式。
 
 插件同时会往 host logger 里写行（成功挂上钩子时用 `ctx.logger.info`，拿不到 LLM 注册表时
 用 `ctx.logger.error`）。但请注意：在本机实测中，真实的 `dsh web` 启动**不会**把
@@ -172,7 +180,7 @@ node test/host.test.mjs             # 11
 | 套件 | 证明什么 |
 | --- | --- |
 | `test/session-header.test.mjs`（19） | 策略本身：范围、值的模式、绝不伪造、绝不改适配器对象、钩子的幂等与精确还原、每个分支都被计数器证明跑到过 |
-| `test/adapter.test.mjs`（10） | 用 pi-ai 自带的 `fauxProvider` 驱动**本机真实安装的** `PiAiAdapter`：头确实进到了 pi-ai `createClient` 最后合并的那个 `SimpleStreamOptions.headers`，且**直接 `stream()` 路径**与"agent loop 实际走的 prepared-call 路径"都覆盖；并有一条对照运行证明"光是环境本身什么都不加" |
+| `test/adapter.test.mjs`（10） | 用 pi-ai 自带的 `fauxProvider` 驱动**本机真实安装的** `PiAiAdapter`：头确实进到了 pi-ai `createClient` 最后合并的那个 `SimpleStreamOptions.headers`，且**直接 `stream()` 路径**与"agent loop 实际走的 prepared-call 路径"都覆盖；另有对照运行证明"光是环境本身什么都不加"，以及一条五 route 的用例钉住前缀边界（`opencode-go-eu` 加头；`opencode-zen`、`my-opencode-go`、`deepseek` 不加） |
 | `test/host.test.mjs`（11） | 发布契约、防御式注册表查找、插件装配（含"没有 web server 的组合"）、route 晚注册的路径、以及端点的信任围栏/方法/路径处理 |
 
 另外用真实进程验证了单元测试覆盖不到的那一环：用一次性 `DSH_HOME`（用 junction 代替
@@ -184,7 +192,7 @@ pnpm）启动真实 `dsh web` 并加载本插件，确认 `ctx.llm.adapters` 在
 ## 刻意不做的事
 
 - 不改安装目录、不改磁盘上的任何 bundle、不 patch 全局 `fetch`。
-- 不碰、不包、不读任何非 pi-ai 形状的适配器；也绝不给白名单之外的 route 加头。
+- 不碰、不包、不读任何非 pi-ai 形状的适配器；也绝不给前缀之外的 route 加头。
 - 对于"既没有会话 id、范围内又找不到发起它的 agent"的调用，不做标注——原样保留部署配置
   的头。
 

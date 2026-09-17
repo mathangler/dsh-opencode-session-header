@@ -1,10 +1,10 @@
 # dsh-opencode-session-header
 
 A DeepSeek Harness plugin that puts a stable **per-conversation**
-`x-opencode-session` header on every inference request the **`opencode-go`** and
-**`opencode-go-custom`** routes make, so OpenCode's Go / Zen gateway stops
-answering `400 MissingSessionID` and can route each conversation to its own
-cache bucket.
+`x-opencode-session` header on every inference request a **`opencode-go…`** route
+makes — the builtin `opencode-go`, this deployment's `opencode-go-custom`, and any
+sibling route added later — so OpenCode's Go / Zen gateway stops answering
+`400 MissingSessionID` and can route each conversation to its own cache bucket.
 
 It replaces the deployment-wide patch script: same fix, same header channel, but
 
@@ -12,8 +12,8 @@ It replaces the deployment-wide patch script: same fix, same header channel, but
   pristine, and no global `fetch`/undici hook is installed;
 - **nothing to re-apply after a DSH upgrade** — the next `dsh` boot loads this
   plugin again;
-- **strictly scoped** — the header exists for those two routes and no other, and
-  no configuration can widen that;
+- **strictly scoped** — the header exists for routes under one prefix and no
+  others, and no configuration can widen that;
 - **reversible** — unloading the plugin restores every object it touched.
 
 English | [中文](README.zh.md)
@@ -34,25 +34,32 @@ So the id is present in the request all the way to the adapter and then dropped.
 This plugin re-attaches it at the last point where the request's header map is
 still an argument.
 
-## Scope: exactly two routes
+## Scope: every `opencode-go…` route
 
-The scope is a hard-coded whitelist, not a pattern:
+The scope is one fixed prefix — not a list, and not a configurable pattern:
 
 ```js
-export const SCOPED_ROUTES = ['opencode-go', 'opencode-go-custom'];
+export const SCOPED_ROUTE_PREFIX = 'opencode-go';   // matched case-insensitively
+export const SCOPED_ROUTE_PATTERN = 'opencode-go*'; // how the status report names it
 ```
 
-`opencode-zen`, `opencode-go-eu`, `my-opencode-go`, `deepseek` — every other
-route is left byte-for-byte alone, including other routes served by the *same*
-adapter instance. There is deliberately no `routes:`/`optInRoutes:`/`skipApis:`
-key: a configuration surface that can widen this is a surface that can send a
-gateway-specific header to a provider that never asked for it. A configuration
-attempt is rejected with an error that says so.
+So the builtin `opencode-go`, this deployment's `opencode-go-custom`, a future
+`opencode-go-eu`, and any other route whose key starts with `opencode-go` are
+labelled the moment such a route is registered — no configuration and no new
+release. Everything else is left byte-for-byte alone, **including other routes
+served by the same adapter instance**: `opencode-zen` (a different gateway
+contract), `my-opencode-go` (the prefix is anchored at the start), `opencode`,
+`deepseek`.
+
+There is deliberately no `routes:` / `optInRoutes:` / `skipApis:` key: the scope is
+a code constant, so a configuration mistake cannot send a gateway-specific header
+to a provider that never asked for it. A configuration attempt is rejected with an
+error that says exactly where the line falls.
 
 This is enforced per **model call**, not per adapter: the plugin hooks the pi-ai
 adapter, and the decision reads the route key on the model descriptor pi-ai
-received. The test suite asserts the negative case on the same adapter that
-carries a whitelisted route.
+received. The test suite asserts both directions on the same adapter instance —
+an `opencode-go-eu` route labelled, an `opencode-zen` route untouched.
 
 ## How it works
 
@@ -126,7 +133,7 @@ memory, so the plugin only takes effect on a fresh `dsh` / `dsh web`.
 
 ## Configuration
 
-Nothing is required: `opencode-go` / `opencode-go-custom` are covered on install.
+Nothing is required: every `opencode-go…` route is covered on install.
 To change the policy, override the row by id in the profile's own patch layer
 (`~/.dsh/profiles/web/cordis.patch.yml`):
 
@@ -155,7 +162,7 @@ Read `value.hooked`, `value.counters` and `value.diagnostics`:
 
 ```jsonc
 {
-  "scope": ["opencode-go", "opencode-go-custom"],
+  "scope": ["opencode-go*"],
   "header": "x-opencode-session",
   "hooked": { "adapters": 1, "prototypes": 1, "collections": 1,
               "routes": ["deepseek-official", "opencode-go", "opencode-go-custom"],
@@ -167,12 +174,14 @@ Read `value.hooked`, `value.counters` and `value.diagnostics`:
 
 - `hooked.adapters: 0` or a diagnostic — the registry was not reachable, and the
   header is **not** being added. That is reported loudly at boot, never silently.
-- `hooked.routesInScope: []` — no route in this profile names the gateway.
+- `hooked.routesInScope: []` — no route in this profile begins with the prefix.
 - `counters.attached: 0` with `calls: 0` — no model call has happened yet; no
   credential is needed to see the hook, but the counters only move on real
   traffic.
-- `preview` shows the exact decision for each scoped route × protocol pair, which
-  is the quickest way to confirm a `value` mode change.
+- `preview` evaluates two routes inside the prefix (`opencode-go`,
+  `opencode-go-custom`) and two outside it (`opencode-zen`, `deepseek`) against
+  every protocol, so it shows both the decision and exactly where the line falls
+  — the quickest way to confirm a `value` mode change.
 
 The plugin also reports through the host logger (`ctx.logger.info` for a
 successful hook, `ctx.logger.error` when the LLM registry cannot be reached).
@@ -197,7 +206,7 @@ processes; each file also runs directly, in-process.)
 | suite | what it proves |
 | --- | --- |
 | `test/session-header.test.mjs` (19) | the policy: scope, value modes, never fabricate, no mutation of the adapter's object, hook idempotence and exact restore, counters on every branch |
-| `test/adapter.test.mjs` (10) | the **real installed** `PiAiAdapter` driven with pi-ai's own `fauxProvider`: the header reaches the exact `SimpleStreamOptions.headers` map that pi-ai's `createClient` merges last, on the direct `stream()` path and on the prepared-call path the agent loop uses — with a control run that proves the environment alone adds nothing |
+| `test/adapter.test.mjs` (10) | the **real installed** `PiAiAdapter` driven with pi-ai's own `fauxProvider`: the header reaches the exact `SimpleStreamOptions.headers` map that pi-ai's `createClient` merges last, on the direct `stream()` path and on the prepared-call path the agent loop uses — with a control run that proves the environment alone adds nothing, and a five-route run that pins the prefix boundary (`opencode-go-eu` labelled; `opencode-zen`, `my-opencode-go`, `deepseek` untouched) |
 | `test/host.test.mjs` (11) | the publication contract, the defensive registry lookup, the plugin wiring (including a composition with no web server), the late-registering registry path, and the endpoint's fence/method/path handling |
 
 Booting a real `dsh web` with this plugin loaded (throwaway `DSH_HOME`, junctions
@@ -211,7 +220,7 @@ the endpoint answers `200` with the profile's cookie and `401` without it, and
 
 - It does not patch the install, any bundle on disk, or global `fetch`.
 - It does not touch, wrap, or inspect any adapter that is not pi-ai shaped, and it
-  never adds a header to a route outside the whitelist.
+  never adds a header to a route outside the prefix.
 - It cannot label a call that carries no conversation id *and* has no initiating
   agent in scope; such a call is left exactly as the deployment configured it.
 

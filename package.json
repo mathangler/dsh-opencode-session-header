@@ -1,6 +1,6 @@
 {
   "name": "dsh-opencode-session-header",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Per-conversation x-opencode-session header for DeepSeek Harness: OpenCode Go / Zen routes stop failing with 400 MissingSessionID, with no file patching, no global fetch hook, and no re-patching after a DSH upgrade.",
   "type": "module",
   "main": "lib/index.js",
