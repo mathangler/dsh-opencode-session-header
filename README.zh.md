@@ -113,27 +113,30 @@ dsh plugin --profile web add github:mathangler/dsh-opencode-session-header
 - 本包没有构建步骤、没有生命周期脚本，因此不会触发任何 build 审批 —— `lib/` 里的源码就是
   实际运行的代码。
 
-## 插件列表里显示什么（中英文）
+## 插件列表里显示什么（图标 + 中英文）
 
-DSH 给插件显示的标题和说明来自包内的 `locale/<语言>.json`，由 DSH 自己的
-`readPluginMeta()` 读取，再由 `locale.resolveText()` 按当前语言解析（它会沿着语言的回退链
-走：`zh` → `en`）。本插件两种语言都带：
+DSH 给插件显示的图标、标题和说明都来自包内的展示元信息，由它自己的 `readPluginMeta()`
+读取：图标来自导出的 `./icon`，文字来自 `locale/<语言>.json`，再由 `locale.resolveText()`
+按当前语言解析（沿着语言的回退链走：`zh` → `en`）。本插件三样都带：
 
-| 文件 | 标题 | 说明 |
-| --- | --- | --- |
-| `locale/en.json` | `opencode-session-header` | 回退到 `package.json` 的英文 `description`（读取器的既定回退） |
-| `locale/zh.json` | `OpenCode 会话头` | 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。 |
+| 文件 | 提供什么 |
+| --- | --- |
+| `icon.svg` | 插件图标 —— 一块"请求"方块，上面是插件所加的那条请求头，画法与 DSH 自带插件的 36×36 渐变方块风格一致 |
+| `locale/en.json` | 英文标题；英文说明按读取器的既定回退取 `package.json` 的 `description` |
+| `locale/zh.json` | 中文标题与说明（`OpenCode 会话头` / 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。） |
 
 在 **设置 → 通用 → 语言** 里切换界面语言，这段文字就会跟着切换；不需要配置本插件，也不需要
 重启。
 
-如果要改这两个文件，有两条规则值得记住：
+如果要改这些文件，有三条规则值得记住：
 
 - **`locale/en.json` 是基准。** 读取器先解析 `<包>/locale/en.json` 找到目录，再扫描该目录，
   所以删掉英文文件会**连带丢掉**其他所有词典。
-- **`exports` 和 `files[]` 决定这些元信息到底存不存在。** 语言资源通过 Node 的 exports 映射
-  解析，而只有 `files[]` 会进发布出来的 tarball。`test/locale.test.mjs` 两样都断言了，并且用
-  DSH 真实的读取器断言它返回 `{ en, zh }` 映射 —— 包括"缺英文基准"那一种情况。
+- **`exports` 和 `files[]` 决定这些元信息到底存不存在。** 语言资源和 `./icon` 都通过 Node 的
+  exports 映射解析，而只有 `files[]` 会进发布出来的 tarball。
+- **图标必须是 SVG / PNG / JPEG / WebP，不超过 256 KiB，且位于包内。** `test/locale.test.mjs`
+  把这些都断言了，并且用 DSH 真实的读取器断言它返回 `{ en, zh }` 映射、以及**逐字节**等于
+  本包图标的 data URL —— 包括"缺英文基准"那一种情况。
 
 ## 配置
 
@@ -225,6 +228,7 @@ pnpm）启动真实 `dsh web` 并加载本插件，确认 `ctx.llm.adapters` 在
 - `lib/session-header.js` —— 与传输无关的核心：策略、每次调用的变换、钩子、状态报告。
 - `lib/index.js` —— Cordis host 半边：注册表扫描、日志、只读状态端点。
 - `locale/en.json`、`locale/zh.json` —— DSH 给本插件显示的标题与说明，每种语言一个文件。
+- `icon.svg` —— DSH 给本插件显示的图标，沿用同一套画法。
 - `test/` —— 上面四个套件。
 - `cordis.patch.yml` —— profile bundle 补丁（一行）。
 

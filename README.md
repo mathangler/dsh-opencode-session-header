@@ -131,32 +131,35 @@ memory, so the plugin only takes effect on a fresh `dsh` / `dsh web`.
 - There is no build step and no lifecycle script, so nothing asks for a build
   approval — the source in `lib/` is what runs.
 
-## What the Plugins page shows (English / Chinese)
+## What the Plugins page shows (icon, English / Chinese)
 
-The title and description DSH lists for a plugin come from
-`locale/<language>.json` inside the package, read by DSH's own
-`readPluginMeta()` and then resolved per the active locale
+DSH renders a plugin's icon, title and description from the package's display
+metadata, read by its own `readPluginMeta()`: the artwork from an exported
+`./icon`, the text from `locale/<language>.json` resolved per the active locale
 (`locale.resolveText()` walks the active language's fallback chain, `zh` → `en`).
-This plugin ships both languages:
+This plugin ships all three:
 
-| file | title | description |
-| --- | --- | --- |
-| `locale/en.json` | `opencode-session-header` | the English `package.json` `description` (the reader's documented fallback) |
-| `locale/zh.json` | `OpenCode 会话头` | 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。 |
+| file | what it provides |
+| --- | --- |
+| `icon.svg` | the plugin's glyph — a request tile carrying the header strip this plugin adds, drawn in the same 36×36 gradient-tile style as the shipped DSH icons |
+| `locale/en.json` | the English title; the English description is the reader's documented fallback to `package.json` `description` |
+| `locale/zh.json` | the Chinese title and description (`OpenCode 会话头` / 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。) |
 
-Switching the UI language (**Settings → General → Language**) switches this text
+Switching the UI language (**Settings → General → Language**) switches the text
 with it; no configuration of this plugin is involved, and no restart is needed.
 
-Two rules matter if you edit these files:
+Three rules matter if you edit these files:
 
 - **`locale/en.json` is the baseline.** The reader finds the directory by
   resolving `<package>/locale/en.json` and then scans it, so deleting the English
   file silently discards every other dictionary.
-- **`exports` and `files[]` decide whether the metadata exists at all.** Locale
-  resources are resolved through Node's exports map, and only `files[]` reaches a
-  published tarball. `test/locale.test.mjs` asserts both, and asserts DSH's real
-  reader returns the `{ en, zh }` map — including the case where the English
-  baseline is missing.
+- **`exports` and `files[]` decide whether the metadata exists at all.** Both the
+  locale resources and `./icon` are resolved through Node's exports map, and only
+  `files[]` reaches a published tarball.
+- **An icon is SVG, PNG, JPEG or WebP, at most 256 KiB, inside the package.**
+  `test/locale.test.mjs` asserts all of this, and asserts DSH's real reader
+  returns the `{ en, zh }` map plus this package's icon byte for byte —
+  including the case where the English baseline is missing.
 
 ## Configuration
 
@@ -261,6 +264,7 @@ the endpoint answers `200` with the profile's cookie and `401` without it, and
   status endpoint.
 - `locale/en.json`, `locale/zh.json` — the title and description DSH lists for
   this plugin, one file per language.
+- `icon.svg` — the glyph DSH lists for this plugin, in the house style.
 - `test/` — the four suites above.
 - `cordis.patch.yml` — the profile bundle patch (one row).
 
