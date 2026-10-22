@@ -142,8 +142,13 @@ This plugin ships all three:
 | file | what it provides |
 | --- | --- |
 | `icon.svg` | the plugin's glyph — a request tile carrying the header strip this plugin adds, drawn in the same 36×36 gradient-tile style as the shipped DSH icons |
-| `locale/en.json` | the English title; the English description is the reader's documented fallback to `package.json` `description` |
-| `locale/zh.json` | the Chinese title and description (`OpenCode 会话头` / 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。) |
+| `locale/en.json` | `OpenCode session header` and its one-sentence English description |
+| `locale/zh.json` | `OpenCode 会话头` and the same sentence in Chinese |
+
+Both languages carry their own curated title and description, so neither falls
+back to the npm `description` (`package.json` keeps that longer text for npm
+itself). That symmetry is deliberate: relying on the fallback is what leaves one
+language with a hand-written card and the other with a package blurb.
 
 Switching the UI language (**Settings → General → Language**) switches the text
 with it; no configuration of this plugin is involved, and no restart is needed.

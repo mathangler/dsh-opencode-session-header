@@ -51,13 +51,15 @@ test('the locale directory follows DSH display-metadata format', () => {
     assert.equal(typeof parsed.meta, 'object', `${language}.json carries a meta object`);
     assert.equal(typeof parsed.meta.title, 'string', `${language}.json meta.title`);
     assert.notEqual(parsed.meta.title.trim(), '', `${language}.json meta.title must not be blank`);
-    if (parsed.meta.description !== undefined) {
-      assert.equal(typeof parsed.meta.description, 'string');
-      assert.notEqual(parsed.meta.description.trim(), '', `${language}.json meta.description must not be blank`);
-    }
+    // Both languages carry their own display description. Leaving English to the
+    // package.json fallback is what made the two languages asymmetric before: the
+    // Chinese card got a curated sentence, the English one the npm blurb.
+    assert.equal(typeof parsed.meta.description, 'string', `${language}.json must describe the plugin itself`);
+    assert.notEqual(parsed.meta.description.trim(), '', `${language}.json meta.description must not be blank`);
   }
-  assert.notEqual(dictionary('zh').meta.description, undefined, 'the Chinese dictionary is the point of the exercise');
   assert.notEqual(dictionary('en').meta.title, dictionary('zh').meta.title, 'the two titles really differ');
+  assert.notEqual(dictionary('en').meta.description, dictionary('zh').meta.description, 'and so do the two descriptions');
+  assert.notEqual(dictionary('en').meta.title, pkg.name, 'the English title is a display name, not the package id');
 });
 
 test('the package exports the locale resources and ships them', () => {
@@ -88,9 +90,10 @@ test("DSH's own reader resolves the dictionaries into an en + zh map", async () 
   assert.equal(meta.error, undefined, `the reader reported ${meta.error}`);
   assert.deepEqual(meta.title, { en: dictionary('en').meta.title, zh: dictionary('zh').meta.title });
   assert.deepEqual(meta.description, {
-    en: pkg.description,
+    en: dictionary('en').meta.description,
     zh: dictionary('zh').meta.description,
-  }, 'English falls back to the package description; Chinese comes from the dictionary');
+  }, 'both languages show their own curated description, not the package fallback');
+  assert.notEqual(meta.description.en, pkg.description, 'the English card text is not the npm blurb');
   assert.equal(JSON.parse(JSON.stringify(meta)).title.zh, dictionary('zh').meta.title, 'the map survives the transport to the client');
   assert.match(meta.icon ?? '', /^data:image\/svg\+xml;base64,/, 'the icon arrives as a data URL the page can render');
   assert.equal(meta.icon, `data:image/svg+xml;base64,${readFileSync(join(root, 'icon.svg')).toString('base64')}`, 'and it is this package\'s icon, byte for byte');

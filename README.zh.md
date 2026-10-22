@@ -122,8 +122,12 @@ DSH 给插件显示的图标、标题和说明都来自包内的展示元信息�
 | 文件 | 提供什么 |
 | --- | --- |
 | `icon.svg` | 插件图标 —— 一块"请求"方块，上面是插件所加的那条请求头，画法与 DSH 自带插件的 36×36 渐变方块风格一致 |
-| `locale/en.json` | 英文标题；英文说明按读取器的既定回退取 `package.json` 的 `description` |
-| `locale/zh.json` | 中文标题与说明（`OpenCode 会话头` / 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。） |
+| `locale/en.json` | `OpenCode session header` 及一句英文说明 |
+| `locale/zh.json` | `OpenCode 会话头` 及同一句话的中文 |
+
+两种语言各自带一份精写的标题和说明，都不再回退到 npm 的 `description`
+（`package.json` 那段更长的文字仍然服务于 npm 本身）。这种对称是刻意的：靠回退，
+就会出现"一种语言是手写卡片文案、另一种语言是包简介"的情况。
 
 在 **设置 → 通用 → 语言** 里切换界面语言，这段文字就会跟着切换；不需要配置本插件，也不需要
 重启。

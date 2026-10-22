@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "OpenCode 会话头",
-    "description": "为 opencode-go 系列路由补上每会话的 x-opencode-session 头，避免 OpenCode Go / Zen 网关返回 400 MissingSessionID。"
+    "description": "为所有 opencode-go 开头的路由按会话补上 x-opencode-session 头，让 OpenCode 的 Go / Zen 网关把每个会话路由到各自的缓存桶，而不是返回 400 MissingSessionID。不改磁盘上的任何文件，DSH 升级后也无需重做。"
   }
 }

@@ -1,5 +1,6 @@
 {
   "meta": {
-    "title": "opencode-session-header"
+    "title": "OpenCode session header",
+    "description": "Adds a per-conversation x-opencode-session header to every opencode-go route, so OpenCode's Go / Zen gateway can route each conversation to its own cache bucket instead of answering 400 MissingSessionID. No file on disk is patched, and a DSH upgrade needs no re-application."
   }
 }
