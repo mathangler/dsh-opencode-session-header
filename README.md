@@ -115,8 +115,8 @@ folds in the row from `cordis.patch.yml` — no manual edit. Then **restart the
 whole `dsh` process**, not just the session: the bundle is already loaded in
 memory, so the plugin only takes effect on a fresh `dsh` / `dsh web`.
 
-- Targets DSH `0.1.6-alpha.1` (and the `0.1.5-rc.*` line). It finds the adapter
-  by shape rather than by import, so a bundle that still has
+- Targets DSH `0.2.1-rc.2` (verified) and the `0.1.5` / `0.1.6` line before it. It
+  finds the adapter by shape rather than by import, so a bundle that still has
   `PiAiAdapter#streamWithSnapshot` keeps working.
 - To update later, remove first — pnpm will not re-resolve a moved `github:`
   HEAD while the spec is unchanged:
@@ -130,6 +130,33 @@ memory, so the plugin only takes effect on a fresh `dsh` / `dsh web`.
   still work: pnpm fetches the tarball from `codeload.github.com`.
 - There is no build step and no lifecycle script, so nothing asks for a build
   approval — the source in `lib/` is what runs.
+
+## What the Plugins page shows (English / Chinese)
+
+The title and description DSH lists for a plugin come from
+`locale/<language>.json` inside the package, read by DSH's own
+`readPluginMeta()` and then resolved per the active locale
+(`locale.resolveText()` walks the active language's fallback chain, `zh` → `en`).
+This plugin ships both languages:
+
+| file | title | description |
+| --- | --- | --- |
+| `locale/en.json` | `opencode-session-header` | the English `package.json` `description` (the reader's documented fallback) |
+| `locale/zh.json` | `OpenCode 会话头` | 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。 |
+
+Switching the UI language (**Settings → General → Language**) switches this text
+with it; no configuration of this plugin is involved, and no restart is needed.
+
+Two rules matter if you edit these files:
+
+- **`locale/en.json` is the baseline.** The reader finds the directory by
+  resolving `<package>/locale/en.json` and then scans it, so deleting the English
+  file silently discards every other dictionary.
+- **`exports` and `files[]` decide whether the metadata exists at all.** Locale
+  resources are resolved through Node's exports map, and only `files[]` reaches a
+  published tarball. `test/locale.test.mjs` asserts both, and asserts DSH's real
+  reader returns the `{ en, zh }` map — including the case where the English
+  baseline is missing.
 
 ## Configuration
 
@@ -191,13 +218,14 @@ answer.
 
 ## Evidence
 
-Three suites, 40 checks, all green against this machine's
-`dsh 0.1.6-alpha.1` / pi-ai `0.85.1`:
+Four suites, 44 checks, all green against this machine's
+`dsh 0.2.1-rc.2` / pi-ai `1.3.0`:
 
 ```bash
 node test/session-header.test.mjs   # 19
 node test/adapter.test.mjs          # 10
 node test/host.test.mjs             # 11
+node test/locale.test.mjs           #  4
 ```
 
 (`node --test test/` works too where the environment allows spawning child
@@ -208,6 +236,7 @@ processes; each file also runs directly, in-process.)
 | `test/session-header.test.mjs` (19) | the policy: scope, value modes, never fabricate, no mutation of the adapter's object, hook idempotence and exact restore, counters on every branch |
 | `test/adapter.test.mjs` (10) | the **real installed** `PiAiAdapter` driven with pi-ai's own `fauxProvider`: the header reaches the exact `SimpleStreamOptions.headers` map that pi-ai's `createClient` merges last, on the direct `stream()` path and on the prepared-call path the agent loop uses — with a control run that proves the environment alone adds nothing, and a five-route run that pins the prefix boundary (`opencode-go-eu` labelled; `opencode-zen`, `my-opencode-go`, `deepseek` untouched) |
 | `test/host.test.mjs` (11) | the publication contract, the defensive registry lookup, the plugin wiring (including a composition with no web server), the late-registering registry path, and the endpoint's fence/method/path handling |
+| `test/locale.test.mjs` (4) | the display metadata: the dictionaries' shape and language ids, the `exports`/`files[]` entries that make them reachable and shipped, DSH's **real reader** returning the `{ en, zh }` map, and the English-baseline gate that silently discards every other dictionary |
 
 Booting a real `dsh web` with this plugin loaded (throwaway `DSH_HOME`, junctions
 instead of pnpm) confirmed the part no unit test can: `ctx.llm.adapters` is
@@ -230,7 +259,9 @@ the endpoint answers `200` with the profile's cookie and `401` without it, and
   transform, the hooks, the status report.
 - `lib/index.js` — the Cordis host half: registry sweep, logging, the read-only
   status endpoint.
-- `test/` — the three suites above.
+- `locale/en.json`, `locale/zh.json` — the title and description DSH lists for
+  this plugin, one file per language.
+- `test/` — the four suites above.
 - `cordis.patch.yml` — the profile bundle patch (one row).
 
 Both `lib/` files import only `node:` builtins and each other. That is not a

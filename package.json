@@ -1,6 +1,6 @@
 {
   "name": "dsh-opencode-session-header",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Per-conversation x-opencode-session header for DeepSeek Harness: OpenCode Go / Zen routes stop failing with 400 MissingSessionID, with no file patching, no global fetch hook, and no re-patching after a DSH upgrade.",
   "type": "module",
   "main": "lib/index.js",
@@ -8,12 +8,16 @@
     ".": "./lib/index.js",
     "./session-header": "./lib/session-header.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/session-header.js",
     "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
     "README.md",
     "README.zh.md",
     "LICENSE"

@@ -99,8 +99,8 @@ dsh plugin --profile web add github:mathangler/dsh-opencode-session-header
 `cordis.patch.yml` 里的那一行（不需要手工改任何文件）。之后必须**完整重启 dsh 进程**
 （不是只重开会话）：bundle 已经加载在内存里，只有全新的 `dsh` / `dsh web` 才会带上插件。
 
-- 目标版本：DSH `0.1.6-alpha.1`（以及 `0.1.5-rc.*` 线）。它按**形状**而不是 import 找到适配器，
-  所以只要 bundle 里还有 `PiAiAdapter#streamWithSnapshot` 就继续可用。
+- 目标版本：DSH `0.2.1-rc.2`（已实测），以及之前的 `0.1.5` / `0.1.6` 线。它按**形状**而不是
+  import 找到适配器，所以只要 bundle 里还有 `PiAiAdapter#streamWithSnapshot` 就继续可用。
 - 以后升级要先 remove 再 add —— 当依赖规格没变时，pnpm 不会重新解析移动过的 `github:` HEAD：
 
   ```powershell
@@ -112,6 +112,28 @@ dsh plugin --profile web add github:mathangler/dsh-opencode-session-header
   `codeload.github.com` 取 tarball 的。
 - 本包没有构建步骤、没有生命周期脚本，因此不会触发任何 build 审批 —— `lib/` 里的源码就是
   实际运行的代码。
+
+## 插件列表里显示什么（中英文）
+
+DSH 给插件显示的标题和说明来自包内的 `locale/<语言>.json`，由 DSH 自己的
+`readPluginMeta()` 读取，再由 `locale.resolveText()` 按当前语言解析（它会沿着语言的回退链
+走：`zh` → `en`）。本插件两种语言都带：
+
+| 文件 | 标题 | 说明 |
+| --- | --- | --- |
+| `locale/en.json` | `opencode-session-header` | 回退到 `package.json` 的英文 `description`（读取器的既定回退） |
+| `locale/zh.json` | `OpenCode 会话头` | 为 opencode-go 系列路由补上每会话的 `x-opencode-session` 头，避免 OpenCode Go / Zen 网关返回 `400 MissingSessionID`。 |
+
+在 **设置 → 通用 → 语言** 里切换界面语言，这段文字就会跟着切换；不需要配置本插件，也不需要
+重启。
+
+如果要改这两个文件，有两条规则值得记住：
+
+- **`locale/en.json` 是基准。** 读取器先解析 `<包>/locale/en.json` 找到目录，再扫描该目录，
+  所以删掉英文文件会**连带丢掉**其他所有词典。
+- **`exports` 和 `files[]` 决定这些元信息到底存不存在。** 语言资源通过 Node 的 exports 映射
+  解析，而只有 `files[]` 会进发布出来的 tarball。`test/locale.test.mjs` 两样都断言了，并且用
+  DSH 真实的读取器断言它返回 `{ en, zh }` 映射 —— 包括"缺英文基准"那一种情况。
 
 ## 配置
 
@@ -166,12 +188,13 @@ GET /opencode-session-header/status
 
 ## 证据
 
-三个测试套件、40 项断言，在本机的 `dsh 0.1.6-alpha.1` / pi-ai `0.85.1` 上全绿：
+四个测试套件、44 项断言，在本机的 `dsh 0.2.1-rc.2` / pi-ai `1.3.0` 上全绿：
 
 ```powershell
 node test/session-header.test.mjs   # 19
 node test/adapter.test.mjs          # 10
 node test/host.test.mjs             # 11
+node test/locale.test.mjs           #  4
 ```
 
 （环境允许 spawn 子进程时也可以用 `node --test test/`；每个文件本身也能直接以进程内方式
@@ -182,6 +205,7 @@ node test/host.test.mjs             # 11
 | `test/session-header.test.mjs`（19） | 策略本身：范围、值的模式、绝不伪造、绝不改适配器对象、钩子的幂等与精确还原、每个分支都被计数器证明跑到过 |
 | `test/adapter.test.mjs`（10） | 用 pi-ai 自带的 `fauxProvider` 驱动**本机真实安装的** `PiAiAdapter`：头确实进到了 pi-ai `createClient` 最后合并的那个 `SimpleStreamOptions.headers`，且**直接 `stream()` 路径**与"agent loop 实际走的 prepared-call 路径"都覆盖；另有对照运行证明"光是环境本身什么都不加"，以及一条五 route 的用例钉住前缀边界（`opencode-go-eu` 加头；`opencode-zen`、`my-opencode-go`、`deepseek` 不加） |
 | `test/host.test.mjs`（11） | 发布契约、防御式注册表查找、插件装配（含"没有 web server 的组合"）、route 晚注册的路径、以及端点的信任围栏/方法/路径处理 |
+| `test/locale.test.mjs`（4） | 展示元信息：词典的形状与语言 id、让它们可达且可发布的 `exports`/`files[]` 条目、DSH **真实读取器**返回的 `{ en, zh }` 映射，以及"缺英文基准就会静默丢掉其他词典"这条门槛 |
 
 另外用真实进程验证了单元测试覆盖不到的那一环：用一次性 `DSH_HOME`（用 junction 代替
 pnpm）启动真实 `dsh web` 并加载本插件，确认 `ctx.llm.adapters` 在活进程里可达、钩子确实
@@ -200,7 +224,8 @@ pnpm）启动真实 `dsh web` 并加载本插件，确认 `ctx.llm.adapters` 在
 
 - `lib/session-header.js` —— 与传输无关的核心：策略、每次调用的变换、钩子、状态报告。
 - `lib/index.js` —— Cordis host 半边：注册表扫描、日志、只读状态端点。
-- `test/` —— 上面三个套件。
+- `locale/en.json`、`locale/zh.json` —— DSH 给本插件显示的标题与说明，每种语言一个文件。
+- `test/` —— 上面四个套件。
 - `cordis.patch.yml` —— profile bundle 补丁（一行）。
 
 `lib/` 里两个文件只 import `node:` 内置模块和彼此。这不是风格偏好：用

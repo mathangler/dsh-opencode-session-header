@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OpenCode 会话头",
+    "description": "为 opencode-go 系列路由补上每会话的 x-opencode-session 头，避免 OpenCode Go / Zen 网关返回 400 MissingSessionID。"
+  }
+}

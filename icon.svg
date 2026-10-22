@@ -1,0 +1,15 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- A model request: a tile in the house gradient, carrying the per-conversation
+       header strip this plugin adds, drawn in white above the request body.
+       Original artwork for this plugin, drawn to read at row-icon size. -->
+  <rect x="3" y="3" width="30" height="30" rx="8" fill="url(#opencode-session-tile)" />
+  <rect x="9.5" y="11" width="17" height="4" rx="2" fill="#FFFFFF" />
+  <path d="M9.5 20.5H24" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+  <path d="M9.5 25H19" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+  <defs>
+    <linearGradient id="opencode-session-tile" x1="18" y1="3" x2="18" y2="33" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6DB9FB" />
+      <stop offset="1" stop-color="#3650DE" />
+    </linearGradient>
+  </defs>
+</svg>

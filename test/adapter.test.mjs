@@ -23,41 +23,18 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createSessionHeader, HEADER_NAME } from '../lib/session-header.js';
+import { dshPackageFile, resolveDshRoot } from './dsh-root.mjs';
 
 const SESSION = 'session-05681fd4-1667-4f46-874f-11fd7f10abbe';
 const UUID = '05681fd4-1667-4f46-874f-11fd7f10abbe';
 const OTHER = 'session-11111111-2222-3333-4444-555555555555';
 
-/**
- * Locate the DSH install whose adapter this process would load.
- *
- * `DSH_ROOT` wins; otherwise the running interpreter's own `node_modules` is the
- * authoritative guess (a global install puts `@deepseek-ai/dsh` next to the
- * `node` binary that launches it). An install that cannot be found is a hard
- * failure, not a skipped test: this suite is the plugin's evidence.
- *
- * @returns the absolute DSH package root.
- */
-function resolveDshRoot() {
-  const candidates = [
-    process.env.DSH_ROOT,
-    join(dirname(process.execPath), 'node_modules', '@deepseek-ai', 'dsh'),
-    join(process.env.APPDATA ?? '', 'npm', 'node_modules', '@deepseek-ai', 'dsh'),
-    join(process.env.ProgramFiles ?? '', 'nodejs', 'node_modules', '@deepseek-ai', 'dsh'),
-  ].filter((candidate) => typeof candidate === 'string' && candidate.length > 0);
-  for (const root of candidates) {
-    if (existsSync(join(root, 'lib', 'bin.js'))) return root;
-  }
-  throw new Error(`could not locate the DSH install; tried:\n  ${candidates.join('\n  ')}`);
-}
-
 const DSH_ROOT = resolveDshRoot();
-const pi = await import(pathToFileURL(join(DSH_ROOT, 'node_modules', '@earendil-works', 'pi-ai', 'dist', 'index.js')).href);
-const { PiAiAdapter } = await import(pathToFileURL(join(DSH_ROOT, 'node_modules', '@deepseek-ai', 'dsh-llm-pi-ai', 'lib', 'index.js')).href);
+const pi = await import(pathToFileURL(dshPackageFile(DSH_ROOT, '@earendil-works', 'pi-ai', 'dist', 'index.js')).href);
+const { PiAiAdapter } = await import(pathToFileURL(dshPackageFile(DSH_ROOT, '@deepseek-ai', 'dsh-llm-pi-ai', 'lib', 'index.js')).href);
 
 /**
  * One faux provider on one route, recording the request options pi-ai receives.
